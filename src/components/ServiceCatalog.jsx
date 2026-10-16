@@ -4,7 +4,7 @@ import { useBooking } from '../context/BookingContext';
 import { Clock, Sparkles, Plus, Check, Star, ShieldCheck, ChevronDown, Scissors, Search } from 'lucide-react';
 
 export const ServiceCatalog = () => {
-  const { services, openBookingWizard } = useBooking();
+  const { services, openBookingWizard, formatPrice, tenant } = useBooking();
   const [activeCategory, setActiveCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedAddOns, setExpandedAddOns] = useState(null);
@@ -30,20 +30,20 @@ export const ServiceCatalog = () => {
   };
 
   return (
-    <section className="py-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-10">
+    <section id="services-menu" className="py-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-10">
       
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-[var(--border-glass)] pb-8">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-[var(--gold-primary)] text-xs font-bold uppercase tracking-wider mb-3">
             <Sparkles className="w-3.5 h-3.5" />
-            Curated Salon Menu
+            Curated Menu
           </div>
           <h2 className="text-3xl sm:text-5xl font-serif font-bold text-white tracking-tight">
             Our Signature <span className="gold-gradient-text">Services & Treatments</span>
           </h2>
           <p className="text-gray-400 mt-2 max-w-xl font-light">
-            Select a service to view details, personalized add-on enhancements, and book with your preferred specialist in Sri Lanka.
+            Select a service to view details, personalized enhancements, and book your appointment with {tenant.name}.
           </p>
         </div>
 
@@ -60,12 +60,12 @@ export const ServiceCatalog = () => {
             />
           </div>
 
-          <div className="flex flex-wrap gap-2 bg-[rgba(255,255,255,0.03)] p-1.5 rounded-2xl border border-[var(--border-glass)]">
+          <div className="flex overflow-x-auto no-scrollbar gap-1.5 sm:flex-wrap bg-[rgba(255,255,255,0.03)] p-1.5 rounded-2xl border border-[var(--border-glass)] whitespace-nowrap">
             {categories.map(cat => (
               <button
                 key={cat.id}
                 onClick={() => setActiveCategory(cat.id)}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                className={`shrink-0 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                   activeCategory === cat.id
                     ? 'bg-[var(--gold-primary)] text-black shadow-lg shadow-amber-500/20'
                     : 'text-gray-400 hover:text-white hover:bg-[rgba(255,255,255,0.08)]'
@@ -114,7 +114,7 @@ export const ServiceCatalog = () => {
                     <span>{service.duration} mins</span>
                   </div>
                   <div className="bg-[var(--gold-primary)] text-black font-extrabold px-3 py-1 rounded-full text-base shadow-lg">
-                    Rs. {service.price.toLocaleString()}
+                    {formatPrice(service.price)}
                   </div>
                 </div>
               </div>
@@ -149,7 +149,7 @@ export const ServiceCatalog = () => {
                               <Plus className="w-3 h-3 text-[var(--gold-primary)]" />
                               {addon.name}
                             </span>
-                            <span className="font-bold text-amber-400">+Rs. {addon.price.toLocaleString()}</span>
+                            <span className="font-bold text-amber-400">+{formatPrice(addon.price)}</span>
                           </div>
                         ))}
                       </div>

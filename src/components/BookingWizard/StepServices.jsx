@@ -1,10 +1,9 @@
 import React from 'react';
-import { SERVICES } from '../../data/mockData';
 import { useBooking } from '../../context/BookingContext';
 import { Check, Plus, Clock, Sparkles } from 'lucide-react';
 
 export const StepServices = () => {
-  const { draftBooking, setDraftBooking, toggleAddOn, calculateTotal } = useBooking();
+  const { services, draftBooking, setDraftBooking, toggleAddOn, calculateTotal, formatPrice } = useBooking();
 
   return (
     <div className="space-y-6">
@@ -13,13 +12,13 @@ export const StepServices = () => {
           <span>Step 1: Choose Your Primary Treatment & Add-ons</span>
         </h3>
         <p className="text-sm text-gray-400 font-light mt-1">
-          Select a service and add any luxury enhancements to your session.
+          Select a service and add any optional enhancements to your session.
         </p>
       </div>
 
       {/* Primary Services Selector */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[340px] overflow-y-auto pr-1">
-        {SERVICES.map(srv => {
+        {services.map(srv => {
           const isSelected = draftBooking.service?.id === srv.id;
           return (
             <div
@@ -27,7 +26,7 @@ export const StepServices = () => {
               onClick={() => setDraftBooking(prev => ({ ...prev, service: srv, selectedAddOns: [] }))}
               className={`p-4 rounded-xl border cursor-pointer transition-all flex items-start gap-4 ${
                 isSelected
-                  ? 'bg-amber-500/10 border-[var(--gold-primary)] shadow-[0_0_15px_rgba(212,175,55,0.2)]'
+                  ? 'bg-amber-500/10 border-[var(--gold-primary)] shadow-[0_0_15px_var(--gold-glow)]'
                   : 'bg-[rgba(255,255,255,0.02)] border-[var(--border-glass)] hover:border-white/20'
               }`}
             >
@@ -39,7 +38,7 @@ export const StepServices = () => {
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between items-start">
                   <h4 className="text-sm font-bold text-white truncate">{srv.name}</h4>
-                  <span className="text-sm font-extrabold text-[var(--gold-primary)] ml-2">Rs. {srv.price.toLocaleString()}</span>
+                  <span className="text-sm font-extrabold text-[var(--gold-primary)] ml-2">{formatPrice(srv.price)}</span>
                 </div>
                 <div className="text-xs text-gray-400 flex items-center gap-1 mt-1">
                   <Clock className="w-3 h-3 text-amber-400" />
@@ -78,7 +77,7 @@ export const StepServices = () => {
                     </div>
                     <span>{addon.name}</span>
                   </div>
-                  <span className="font-bold text-amber-400">+Rs. {addon.price.toLocaleString()}</span>
+                  <span className="font-bold text-amber-400">+{formatPrice(addon.price)}</span>
                 </div>
               );
             })}
@@ -94,10 +93,11 @@ export const StepServices = () => {
         <div className="text-right">
           <span className="text-xs text-gray-400 block">Total Est.</span>
           <span className="text-xl font-extrabold text-[var(--gold-primary)]">
-            Rs. {calculateTotal(draftBooking.service, draftBooking.selectedAddOns).toLocaleString()}
+            {formatPrice(calculateTotal(draftBooking.service, draftBooking.selectedAddOns))}
           </span>
         </div>
       </div>
     </div>
   );
 };
+

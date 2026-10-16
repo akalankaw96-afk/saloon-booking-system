@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useBooking } from '../context/BookingContext';
 import { TIME_SLOTS } from '../data/mockData';
-import { Calendar, Clock, User, QrCode, XCircle, AlertCircle, Sparkles, CheckCircle2, RefreshCw, X, Search, Lock, ShieldCheck } from 'lucide-react';
+import { Calendar, Clock, User, MessageSquare, XCircle, AlertCircle, Sparkles, CheckCircle2, RefreshCw, X, Search, Lock, ShieldCheck } from 'lucide-react';
 
 export const AppointmentsModal = () => {
-  const { myGuestBookings, cancelBooking, rescheduleBooking, setActivePassBooking, openBookingWizard, claimBookingToSession } = useBooking();
+  const { myGuestBookings, cancelBooking, rescheduleBooking, setActivePassBooking, openBookingWizard, claimBookingToSession, formatPrice } = useBooking();
   const [filter, setFilter] = useState('all'); // 'all' | 'confirmed' | 'completed' | 'cancelled'
   const [lookupQuery, setLookupQuery] = useState('');
   
@@ -52,27 +52,27 @@ export const AppointmentsModal = () => {
   };
 
   return (
-    <section className="py-12 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto space-y-8 animate-fade-in">
+    <section className="py-6 sm:py-12 px-3 sm:px-6 lg:px-8 max-w-6xl mx-auto space-y-6 sm:space-y-8 animate-fade-in">
       
       {/* Header Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-[var(--border-glass)] pb-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6 border-b border-[var(--border-glass)] pb-5 sm:pb-6">
         <div>
-          <div className="inline-flex items-center gap-2 text-xs font-bold text-[var(--gold-primary)] uppercase tracking-wider mb-2">
+          <div className="inline-flex items-center gap-2 text-xs font-bold text-[var(--gold-primary)] uppercase tracking-wider mb-1 sm:mb-2">
             <Lock className="w-4 h-4 text-emerald-400" />
             Guest Session Storage (Private & Contactless)
           </div>
-          <h2 className="text-3xl font-serif font-bold text-white">
+          <h2 className="text-2xl sm:text-3xl font-serif font-bold text-white">
             My Scheduled <span className="gold-gradient-text">Appointments</span>
           </h2>
         </div>
 
         {/* Track Booking Lookup Bar */}
-        <form onSubmit={handleLookupSubmit} className="flex items-center gap-2">
+        <form onSubmit={handleLookupSubmit} className="flex items-center gap-2 w-full md:w-auto">
           <div className="relative flex-1 sm:w-72">
             <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Track by Booking Ref (BK-XXXX) or Phone..."
+              placeholder="Track by Booking Ref or Phone..."
               value={lookupQuery}
               onChange={e => setLookupQuery(e.target.value)}
               className="w-full bg-black/60 border border-[var(--border-gold)] rounded-xl pl-9 pr-3 py-2 text-xs text-white focus:outline-none"
@@ -80,7 +80,7 @@ export const AppointmentsModal = () => {
           </div>
           <button
             type="submit"
-            className="btn-outline-gold text-xs py-2 px-3 whitespace-nowrap"
+            className="btn-outline-gold text-xs py-2 px-3 whitespace-nowrap cursor-pointer shrink-0"
           >
             Find Booking
           </button>
@@ -88,17 +88,17 @@ export const AppointmentsModal = () => {
       </div>
 
       {/* Filter Tabs */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="text-xs text-gray-400">
           Showing <strong className="text-amber-400">{filteredBookings.length}</strong> appointment(s) saved to this device.
         </div>
 
-        <div className="flex items-center gap-2 bg-[rgba(255,255,255,0.03)] p-1.5 rounded-2xl border border-[var(--border-glass)]">
+        <div className="flex overflow-x-auto no-scrollbar gap-1.5 bg-[rgba(255,255,255,0.03)] p-1.5 rounded-xl border border-[var(--border-glass)] w-full sm:w-auto whitespace-nowrap">
           {['all', 'confirmed', 'completed', 'cancelled'].map(tab => (
             <button
               key={tab}
               onClick={() => setFilter(tab)}
-              className={`px-3.5 py-1 rounded-xl text-xs font-semibold capitalize transition-all ${
+              className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all cursor-pointer ${
                 filter === tab
                   ? 'bg-[var(--gold-primary)] text-black font-bold shadow'
                   : 'text-gray-400 hover:text-white'
@@ -112,18 +112,45 @@ export const AppointmentsModal = () => {
 
       {/* Appointments List */}
       {filteredBookings.length === 0 ? (
-        <div className="glass-panel p-12 text-center space-y-4 max-w-md mx-auto">
-          <Calendar className="w-12 h-12 text-gray-500 mx-auto" />
-          <h3 className="text-xl font-serif text-white font-bold">No Guest Appointments Found</h3>
-          <p className="text-sm text-gray-400 font-light">
-            You don't have any saved appointments under "{filter}" on this device.
-          </p>
-          <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+        <div className="glass-panel p-8 sm:p-12 text-center space-y-6 max-w-lg mx-auto">
+          <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-[var(--gold-primary)] flex items-center justify-center mx-auto">
+            <Calendar className="w-8 h-8" />
+          </div>
+          <div>
+            <h3 className="text-xl font-serif text-white font-bold mb-1">No Saved Bookings on This Device</h3>
+            <p className="text-xs text-gray-400 font-light max-w-sm mx-auto">
+              Bookings are kept private per device. If you booked from another device or browser, enter your <strong>Phone Number</strong> or <strong>Booking Ref</strong> below to retrieve your tickets.
+            </p>
+          </div>
+
+          {/* Quick Lookup Box inside empty state */}
+          <form onSubmit={handleLookupSubmit} className="space-y-3 bg-black/40 p-4 rounded-xl border border-white/10 text-left">
+            <label className="block text-xs font-semibold text-gray-300">
+              Lookup Your Existing Appointment:
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Enter Phone Number or BK-XXXX..."
+                value={lookupQuery}
+                onChange={e => setLookupQuery(e.target.value)}
+                className="flex-1 bg-black/60 border border-[var(--border-gold)] rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none"
+              />
+              <button
+                type="submit"
+                className="btn-primary text-xs py-2 px-4 whitespace-nowrap"
+              >
+                Find My Booking
+              </button>
+            </div>
+          </form>
+
+          <div className="pt-2 flex items-center justify-center gap-3">
             <button
               onClick={() => openBookingWizard()}
-              className="btn-primary"
+              className="btn-outline-gold text-xs py-2 px-5"
             >
-              <Sparkles className="w-4 h-4 fill-black" />
+              <Sparkles className="w-4 h-4 text-[var(--gold-primary)]" />
               <span>Book New Appointment</span>
             </button>
           </div>
@@ -174,7 +201,7 @@ export const AppointmentsModal = () => {
 
                 <div className="flex justify-between pt-2 border-t border-white/10 text-sm">
                   <span className="text-gray-300 font-semibold">Total Price:</span>
-                  <span className="text-amber-400 font-extrabold">Rs. {b.totalPrice.toLocaleString()}</span>
+                  <span className="text-[var(--gold-primary)] font-extrabold">{formatPrice(b.totalPrice)}</span>
                 </div>
               </div>
 
@@ -182,10 +209,11 @@ export const AppointmentsModal = () => {
               <div className="flex items-center justify-between gap-2 pt-2 border-t border-white/5">
                 <button
                   onClick={() => setActivePassBooking(b)}
-                  className="btn-outline-gold text-xs py-2 px-3 flex items-center gap-1.5"
+                  className="btn-outline-gold text-xs py-2 px-3 flex items-center gap-1.5 cursor-pointer"
+                  title="View and send confirmation message to phone"
                 >
-                  <QrCode className="w-3.5 h-3.5" />
-                  <span>Pass</span>
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>Phone Message</span>
                 </button>
 
                 {b.status === 'confirmed' || b.status === 'pending' ? (

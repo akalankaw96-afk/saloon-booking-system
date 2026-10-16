@@ -60,7 +60,7 @@ h1, h2, h3, .font-serif {
 }
 
 .gold-gradient-text {
-  background: var(--gold-gradient);
+  background: linear-gradient(135deg, var(--gold-primary) 0%, var(--gold-hover, #f3c644) 50%, var(--gold-primary) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   display: inline-block;
@@ -86,7 +86,7 @@ h1, h2, h3, .font-serif {
 
 /* Buttons */
 .btn-primary {
-  background: linear-gradient(135deg, #d4af37 0%, #b38728 100%);
+  background: linear-gradient(135deg, var(--gold-hover, #f3c644) 0%, var(--gold-primary, #d4af37) 100%);
   color: #000;
   font-weight: 700;
   font-family: var(--font-sans);
@@ -98,14 +98,14 @@ h1, h2, h3, .font-serif {
   align-items: center;
   gap: 10px;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 20px rgba(212, 175, 55, 0.3);
+  box-shadow: 0 4px 20px var(--gold-glow, rgba(212, 175, 55, 0.3));
   text-decoration: none;
 }
 
 .btn-primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(212, 175, 55, 0.5);
-  background: linear-gradient(135deg, #f3c644 0%, #d4af37 100%);
+  box-shadow: 0 8px 25px var(--gold-glow, rgba(212, 175, 55, 0.5));
+  background: linear-gradient(135deg, var(--gold-primary, #d4af37) 0%, var(--gold-hover, #f3c644) 100%);
 }
 
 .btn-secondary {
@@ -141,20 +141,23 @@ h1, h2, h3, .font-serif {
 .btn-outline-gold:hover {
   background: var(--gold-primary);
   color: #000;
-  box-shadow: 0 0 15px rgba(212, 175, 55, 0.4);
+  box-shadow: 0 0 15px var(--gold-glow, rgba(212, 175, 55, 0.4));
 }
 
 /* Badges */
 .badge-gold {
-  background: rgba(212, 175, 55, 0.15);
+  background: var(--gold-glow, rgba(212, 175, 55, 0.15));
   color: var(--gold-primary);
   border: 1px solid var(--border-gold);
+  font-size: 11px;
+  font-weight: 700;
   padding: 4px 12px;
   border-radius: var(--radius-full);
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 .badge-emerald {
@@ -196,13 +199,14 @@ h1, h2, h3, .font-serif {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(5, 6, 10, 0.82);
+  background: rgba(5, 6, 10, 0.85);
   backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  padding: 20px;
+  padding: 16px;
 }
 
 .modal-content {
@@ -213,6 +217,40 @@ h1, h2, h3, .font-serif {
   max-width: 850px;
   max-height: 90vh;
   overflow-y: auto;
-  box-shadow: 0 25px 60px rgba(0,0,0,0.8);
+  box-shadow: 0 25px 60px rgba(0,0,0,0.85);
   animation: fadeIn 0.3s ease-out;
+  -webkit-overflow-scrolling: touch;
 }
+
+/* Touch & Mobile Optimizations */
+button, a, select, input, textarea {
+  touch-action: manipulation;
+}
+
+/* Hide scrollbars for modern scrollable tabs & chips */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@media (max-width: 640px) {
+  .modal-overlay {
+    padding: 10px;
+  }
+  
+  .modal-content {
+    max-height: 95vh;
+    border-radius: 20px;
+  }
+
+  /* Prevent aggressive iOS Safari input focus auto-zoom */
+  input:not([type="checkbox"]):not([type="radio"]), 
+  select, 
+  textarea {
+    font-size: 16px !important;
+  }
+}
+

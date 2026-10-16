@@ -14,10 +14,19 @@ import { ToastNotification } from './components/ToastNotification';
 import { Scissors, MapPin, Phone, Mail, Clock, Globe, Share2, Sparkles, MessageSquare, Lock, ShieldCheck } from 'lucide-react';
 
 const MainContent = () => {
-  const { activeTab, setActiveTab, openBookingWizard, isAdminAuthenticated, openAdminLogin } = useBooking();
+  const { 
+    activeTab, 
+    setActiveTab, 
+    openBookingWizard, 
+    isAdminAuthenticated, 
+    openManagerLogin, 
+    openStylistLogin, 
+    activeStylist,
+    tenant 
+  } = useBooking();
 
   return (
-    <div className="min-h-screen flex flex-col justify-between bg-[#0b0c10] text-gray-100 selection:bg-[var(--gold-primary)] selection:text-black">
+    <div className="min-h-screen flex flex-col justify-between bg-[var(--bg-dark)] text-gray-100 selection:bg-[var(--gold-primary)] selection:text-black">
       
       {/* Navigation Header */}
       <Navbar />
@@ -31,8 +40,8 @@ const MainContent = () => {
           </>
         )}
 
-        {activeTab === 'portfolio' && <StylistPortfolio />}
-        {activeTab === 'reviews' && <CustomerReviews />}
+        {activeTab === 'portfolio' && tenant.features.hasPortfolio && <StylistPortfolio />}
+        {activeTab === 'reviews' && tenant.features.hasReviews && <CustomerReviews />}
         {activeTab === 'my-bookings' && <AppointmentsModal />}
         {activeTab === 'admin' && <AdminDashboard />}
       </main>
@@ -50,15 +59,15 @@ const MainContent = () => {
           {/* Brand Info */}
           <div className="space-y-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#d4af37] to-[#f59e0b] flex items-center justify-center">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[var(--gold-primary)] to-amber-500 flex items-center justify-center shadow-[0_0_15px_var(--gold-glow)]">
                 <Scissors className="w-5 h-5 text-black transform -rotate-45" />
               </div>
               <span className="font-serif text-xl font-bold tracking-tight text-white">
-                LUXECUT STUDIO
+                {tenant.fullName}
               </span>
             </div>
             <p className="text-gray-400 font-light leading-relaxed">
-              Premier luxury salon and wellness spa in Colombo, Sri Lanka. Dedicated to bespoke hairdressing, dimensional color artistry, and restorative scalp therapy.
+              {tenant.tagline}
             </p>
           </div>
 
@@ -73,16 +82,20 @@ const MainContent = () => {
                   Services & Menu
                 </button>
               </li>
-              <li>
-                <button onClick={() => setActiveTab('portfolio')} className="hover:text-white transition-colors">
-                  Lookbook Gallery
-                </button>
-              </li>
-              <li>
-                <button onClick={() => setActiveTab('reviews')} className="hover:text-white transition-colors">
-                  Verified Reviews
-                </button>
-              </li>
+              {tenant.features.hasPortfolio && (
+                <li>
+                  <button onClick={() => setActiveTab('portfolio')} className="hover:text-white transition-colors">
+                    Lookbook Gallery
+                  </button>
+                </li>
+              )}
+              {tenant.features.hasReviews && (
+                <li>
+                  <button onClick={() => setActiveTab('reviews')} className="hover:text-white transition-colors">
+                    Verified Reviews
+                  </button>
+                </li>
+              )}
               <li>
                 <button onClick={() => setActiveTab('my-bookings')} className="hover:text-white transition-colors">
                   My Bookings Portal
@@ -99,15 +112,15 @@ const MainContent = () => {
             <div className="space-y-2 text-gray-400">
               <div className="flex items-start gap-2">
                 <MapPin className="w-4 h-4 text-[var(--gold-primary)] shrink-0 mt-0.5" />
-                <span>280 Galle Road, Kollupitiya<br />Colombo 03, Sri Lanka</span>
+                <span className="leading-snug">{tenant.contact.address}</span>
               </div>
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-[var(--gold-primary)] shrink-0" />
-                <span>Mon – Sat: 9:00 AM – 7:00 PM</span>
+                <span>{tenant.contact.hours}</span>
               </div>
               <div className="flex items-center gap-2">
                 <Phone className="w-4 h-4 text-[var(--gold-primary)] shrink-0" />
-                <span>+94 (11) 255-LUXE</span>
+                <span>{tenant.contact.phone}</span>
               </div>
             </div>
           </div>
@@ -118,7 +131,7 @@ const MainContent = () => {
               Reserve Experience
             </h4>
             <p className="text-gray-400 font-light">
-              Ready for your transformation? Reserve your appointment online in under 60 seconds.
+              Ready for your appointment? Reserve your spot online in under 60 seconds.
             </p>
             <button
               onClick={() => openBookingWizard()}
@@ -131,18 +144,31 @@ const MainContent = () => {
 
         </div>
 
-        <div className="max-w-7xl mx-auto border-t border-white/5 mt-10 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-gray-500">
-          <p>© 2026 LuxeCut Salon & Spa Studio (Sri Lanka). All rights reserved.</p>
-          <div className="flex items-center gap-4 text-gray-400">
+        <div className="max-w-7xl mx-auto border-t border-white/5 mt-8 sm:mt-10 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-gray-500 text-center sm:text-left">
+          <p>© 2026 {tenant.fullName}. All rights reserved.</p>
+          <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2.5 sm:gap-4 text-gray-400">
+            {/* Stylist Chair Access */}
             <button
-              onClick={() => isAdminAuthenticated ? setActiveTab('admin') : openAdminLogin()}
-              className="flex items-center gap-1.5 text-[11px] text-gray-500 hover:text-purple-400 transition-colors"
-              title="Staff & Management Access Portal"
+              onClick={() => activeStylist ? setActiveTab('admin') : openStylistLogin()}
+              className="flex items-center gap-1.5 text-[11px] text-amber-400 hover:text-amber-300 transition-colors font-medium cursor-pointer"
+              title="Stylist Chair Station & Personal Timetable"
             >
-              <Lock className="w-3.5 h-3.5" />
-              <span>Staff Access</span>
+              <Scissors className="w-3.5 h-3.5" />
+              <span>{activeStylist ? `Station: ${activeStylist.name.split(' ')[0]}` : 'Stylist Access'}</span>
             </button>
-            <span className="text-gray-700">|</span>
+
+            <span className="text-gray-700 hidden xs:inline">|</span>
+
+            {/* Staff / Manager Access */}
+            <button
+              onClick={() => isAdminAuthenticated ? setActiveTab('admin') : openManagerLogin()}
+              className="flex items-center gap-1.5 text-[11px] text-purple-400 hover:text-purple-300 transition-colors font-medium cursor-pointer"
+              title="Salon Manager & Revenue Portal"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>{isAdminAuthenticated ? 'Manager Admin' : 'Staff / Manager Access'}</span>
+            </button>
+            <span className="text-gray-700 hidden xs:inline">|</span>
             <Globe className="w-4 h-4 hover:text-[var(--gold-primary)] cursor-pointer" />
             <Share2 className="w-4 h-4 hover:text-[var(--gold-primary)] cursor-pointer" />
             <MessageSquare className="w-4 h-4 hover:text-[var(--gold-primary)] cursor-pointer" />

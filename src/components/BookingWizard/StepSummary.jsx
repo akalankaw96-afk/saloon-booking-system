@@ -3,7 +3,7 @@ import { useBooking } from '../../context/BookingContext';
 import { User, Mail, Phone, FileText, CheckCircle2, ShieldCheck, CreditCard, DollarSign, Lock } from 'lucide-react';
 
 export const StepSummary = () => {
-  const { draftBooking, setDraftBooking, calculateTotal } = useBooking();
+  const { draftBooking, setDraftBooking, calculateTotal, formatPrice, tenant } = useBooking();
 
   const handleInputChange = (field, value) => {
     setDraftBooking(prev => ({
@@ -16,6 +16,7 @@ export const StepSummary = () => {
   };
 
   const total = calculateTotal(draftBooking.service, draftBooking.selectedAddOns);
+  const allowDeposit = tenant.features.allowOnlineDeposit;
 
   return (
     <div className="space-y-6">
@@ -24,7 +25,7 @@ export const StepSummary = () => {
           <span>Step 4: Contact & Payment Options</span>
         </h3>
         <p className="text-sm text-gray-400 font-light mt-1">
-          Review your appointment details and complete your reservation.
+          Review your appointment details and complete your reservation with {tenant.name}.
         </p>
       </div>
 
@@ -85,7 +86,7 @@ export const StepSummary = () => {
               <CreditCard className="w-3.5 h-3.5" />
               Payment & Hold Options
             </label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className={`grid ${allowDeposit ? 'grid-cols-2' : 'grid-cols-1'} gap-3`}>
               <button
                 type="button"
                 onClick={() => setDraftBooking(prev => ({ ...prev, paymentMethod: 'salon' }))}
@@ -97,37 +98,39 @@ export const StepSummary = () => {
               >
                 <div className="font-bold text-white flex items-center gap-1.5">
                   <DollarSign className="w-4 h-4 text-[var(--gold-primary)]" />
-                  Pay at Salon
+                  Pay at Venue
                 </div>
-                <div className="text-[11px] text-gray-400 mt-1">Pay full amount in LKR during visit.</div>
+                <div className="text-[11px] text-gray-400 mt-1">Pay full amount during visit ({tenant.currency.code}).</div>
               </button>
 
-              <button
-                type="button"
-                onClick={() => setDraftBooking(prev => ({ ...prev, paymentMethod: 'deposit' }))}
-                className={`p-3 rounded-xl border text-left text-xs transition-all ${
-                  draftBooking.paymentMethod === 'deposit'
-                    ? 'bg-amber-500/20 border-[var(--gold-primary)] text-white'
-                    : 'bg-black/40 border-white/10 text-gray-400'
-                }`}
-              >
-                <div className="font-bold text-white flex items-center gap-1.5">
-                  <Lock className="w-4 h-4 text-emerald-400" />
-                  Pay Rs. 1,500 Deposit
-                </div>
-                <div className="text-[11px] text-gray-400 mt-1">Guarantees prime slot & lock.</div>
-              </button>
+              {allowDeposit && (
+                <button
+                  type="button"
+                  onClick={() => setDraftBooking(prev => ({ ...prev, paymentMethod: 'deposit' }))}
+                  className={`p-3 rounded-xl border text-left text-xs transition-all ${
+                    draftBooking.paymentMethod === 'deposit'
+                      ? 'bg-amber-500/20 border-[var(--gold-primary)] text-white'
+                      : 'bg-black/40 border-white/10 text-gray-400'
+                  }`}
+                >
+                  <div className="font-bold text-white flex items-center gap-1.5">
+                    <Lock className="w-4 h-4 text-emerald-400" />
+                    Reserve with Deposit
+                  </div>
+                  <div className="text-[11px] text-gray-400 mt-1">Guarantees prime slot & lock.</div>
+                </button>
+              )}
             </div>
           </div>
 
           <div className="space-y-1">
             <label className="text-xs font-bold uppercase tracking-wider text-gray-300 flex items-center gap-1.5">
               <FileText className="w-3.5 h-3.5 text-[var(--gold-primary)]" />
-              Special Requests or Hair/Skin Notes (Optional)
+              Special Requests or Notes (Optional)
             </label>
             <textarea
               rows={2}
-              placeholder="Any hair color history, scalp sensitivities, or preferred Ceylon tea during your stay..."
+              placeholder="Any specific preferences or sensitivities..."
               value={draftBooking.customer.notes}
               onChange={e => handleInputChange('notes', e.target.value)}
               className="w-full bg-black/50 border border-[var(--border-glass)] rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-[var(--gold-primary)] resize-none"
@@ -143,7 +146,7 @@ export const StepSummary = () => {
                 Reservation Summary
               </span>
               <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/40 font-bold">
-                {draftBooking.paymentMethod === 'deposit' ? 'Rs. 1,500 Deposit Hold' : 'Pay at Salon'}
+                {draftBooking.paymentMethod === 'deposit' ? 'Deposit Hold' : 'Pay at Venue'}
               </span>
             </div>
 
@@ -170,7 +173,7 @@ export const StepSummary = () => {
                 {draftBooking.selectedAddOns.map(a => (
                   <div key={a.id} className="flex justify-between text-xs text-gray-400">
                     <span>+ {a.name}</span>
-                    <span className="text-amber-400">+Rs. {a.price.toLocaleString()}</span>
+                    <span className="text-amber-400">+{formatPrice(a.price)}</span>
                   </div>
                 ))}
               </div>
@@ -180,13 +183,13 @@ export const StepSummary = () => {
           <div className="border-t border-white/10 pt-3 space-y-2">
             {draftBooking.paymentMethod === 'deposit' && (
               <div className="flex items-center justify-between text-xs text-emerald-400 font-semibold">
-                <span>Deposit Due Now:</span>
-                <span>Rs. 1,500</span>
+                <span>Deposit Hold:</span>
+                <span>{formatPrice(1500)}</span>
               </div>
             )}
             <div className="flex items-center justify-between">
-              <span className="text-sm font-bold text-white">Total Treatment Value:</span>
-              <span className="text-2xl font-extrabold text-[var(--gold-primary)]">Rs. {total.toLocaleString()}</span>
+              <span className="text-sm font-bold text-white">Total Value:</span>
+              <span className="text-2xl font-extrabold text-[var(--gold-primary)]">{formatPrice(total)}</span>
             </div>
           </div>
         </div>

@@ -1,16 +1,16 @@
 import React, { useState } from 'react';
 import { useBooking } from '../context/BookingContext';
-import { SERVICES } from '../data/mockData';
 import { Star, MessageSquare, CheckCircle2, Plus, X, Sparkles } from 'lucide-react';
 
 export const CustomerReviews = () => {
-  const { reviews, addReview } = useBooking();
+  const { reviews, addReview, services, tenant } = useBooking();
   const [isFormOpen, setIsFormOpen] = useState(false);
   
+  const defaultServiceName = services[0]?.name || 'Specialist Treatment';
   const [formData, setFormData] = useState({
     author: '',
     rating: 5,
-    service: SERVICES[0].name,
+    service: defaultServiceName,
     comment: ''
   });
 
@@ -18,7 +18,7 @@ export const CustomerReviews = () => {
     e.preventDefault();
     if (!formData.comment) return;
     addReview(formData);
-    setFormData({ author: '', rating: 5, service: SERVICES[0].name, comment: '' });
+    setFormData({ author: '', rating: 5, service: defaultServiceName, comment: '' });
     setIsFormOpen(false);
   };
 

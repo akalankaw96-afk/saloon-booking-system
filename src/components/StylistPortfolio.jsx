@@ -4,7 +4,7 @@ import { useBooking } from '../context/BookingContext';
 import { Sparkles, Camera, Eye, Scissors } from 'lucide-react';
 
 export const StylistPortfolio = () => {
-  const { openBookingWizard } = useBooking();
+  const { openBookingWizard, tenant } = useBooking();
   const [filter, setFilter] = useState('all');
 
   const categories = [
@@ -30,10 +30,10 @@ export const StylistPortfolio = () => {
             Style Showcase
           </div>
           <h2 className="text-3xl sm:text-5xl font-serif font-bold text-white">
-            The LuxeCut <span className="gold-gradient-text">Lookbook</span>
+            The {tenant.name} <span className="gold-gradient-text">Lookbook</span>
           </h2>
           <p className="text-gray-400 mt-2 max-w-xl font-light">
-            Explore recent transformations crafted by our master stylists. Tap any style to request it in your booking!
+            Explore recent transformations crafted by our specialists. Tap any style to request it in your booking!
           </p>
         </div>
 

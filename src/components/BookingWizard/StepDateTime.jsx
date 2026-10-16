@@ -4,7 +4,7 @@ import { useBooking } from '../../context/BookingContext';
 import { Calendar, Clock, Check, AlertCircle } from 'lucide-react';
 
 export const StepDateTime = () => {
-  const { draftBooking, setDraftBooking, bookings } = useBooking();
+  const { draftBooking, setDraftBooking, bookings, activeTenantId, stylists, getStylistSlotsForDate } = useBooking();
 
   // Today ISO date string
   const todayStr = new Date().toISOString().split('T')[0];
@@ -21,9 +21,32 @@ export const StepDateTime = () => {
     days.push({ dateStr, dayName, monthDay });
   }
 
-  // Check existing bookings to mark taken slots
-  const selectedDateBookings = bookings.filter(b => b.date === draftBooking.date && b.status !== 'cancelled');
-  const occupiedTimes = selectedDateBookings.map(b => b.time);
+  // Tenant-scoped bookings for the chosen date (ignoring cancelled bookings)
+  const tenantDateBookings = bookings.filter(b => 
+    (b.tenantId || 'luxecut') === activeTenantId &&
+    b.date === draftBooking.date && 
+    b.status !== 'cancelled'
+  );
+
+  // Stylist-aware slot occupation: walk-in, queue hold, or appointment locks the slot
+  const selectedStylistId = draftBooking.stylist?.id;
+  const allSlots = (getStylistSlotsForDate && selectedStylistId && selectedStylistId !== 'any')
+    ? getStylistSlotsForDate(selectedStylistId, draftBooking.date)
+    : (getStylistSlotsForDate ? getStylistSlotsForDate(null, draftBooking.date) : TIME_SLOTS);
+
+  const occupiedTimes = allSlots.filter(time => {
+    if (selectedStylistId && selectedStylistId !== 'any') {
+      return tenantDateBookings.some(b => 
+        b.time === time && (b.stylistId === selectedStylistId || b.stylistId === 'any')
+      );
+    } else {
+      const bookedStylistIds = new Set(
+        tenantDateBookings.filter(b => b.time === time).map(b => b.stylistId)
+      );
+      const activeStylistCount = stylists.filter(s => s.status === 'active').length || 1;
+      return bookedStylistIds.size >= activeStylistCount;
+    }
+  });
 
   return (
     <div className="space-y-6">
@@ -58,7 +81,7 @@ export const StepDateTime = () => {
         </div>
 
         {/* Quick Date Selector Bar */}
-        <div className="grid grid-cols-3 sm:grid-cols-7 gap-2">
+        <div className="flex overflow-x-auto no-scrollbar gap-2 sm:grid sm:grid-cols-7 pb-1">
           {days.map(day => {
             const isSelected = draftBooking.date === day.dateStr;
             return (
@@ -66,16 +89,16 @@ export const StepDateTime = () => {
                 key={day.dateStr}
                 type="button"
                 onClick={() => setDraftBooking(prev => ({ ...prev, date: day.dateStr }))}
-                className={`p-3 rounded-xl border text-center transition-all ${
+                className={`min-w-[78px] sm:min-w-0 shrink-0 sm:shrink p-2.5 sm:p-3 rounded-xl border text-center transition-all cursor-pointer ${
                   isSelected
                     ? 'bg-[var(--gold-primary)] text-black border-[var(--gold-primary)] font-bold shadow-[0_0_15px_rgba(212,175,55,0.4)]'
                     : 'bg-black/40 border-[var(--border-glass)] text-gray-300 hover:border-white/20'
                 }`}
               >
-                <span className="block text-[11px] uppercase tracking-wider font-semibold opacity-80">
+                <span className="block text-[10px] sm:text-[11px] uppercase tracking-wider font-semibold opacity-80">
                   {day.dayName}
                 </span>
-                <span className="block text-sm font-extrabold mt-0.5">
+                <span className="block text-xs sm:text-sm font-extrabold mt-0.5">
                   {day.monthDay}
                 </span>
               </button>
@@ -95,7 +118,7 @@ export const StepDateTime = () => {
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
-          {TIME_SLOTS.map(time => {
+          {allSlots.map(time => {
             const isTaken = occupiedTimes.includes(time);
             const isSelected = draftBooking.time === time;
 
