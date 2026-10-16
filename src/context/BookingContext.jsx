@@ -205,6 +205,79 @@ export const BookingProvider = ({ children }) => {
     return () => window.removeEventListener('storage', handleStorage);
   }, [activeTenantId]);
 
+  // Reusable manual and automatic Cloud Sync method
+  const syncWithCloud = async (silent = false) => {
+    if (!isSupabaseConfigured || !supabase) {
+      if (!silent) showToast('Offline Mode', 'Supabase client is not configured.', 'error');
+      setCloudSyncStatus('local-only');
+      return false;
+    }
+
+    setIsCloudSyncing(true);
+    try {
+      // 1. Sync Services
+      const { data: dbServices, error: srvError } = await supabase
+        .from('salon_services')
+        .select('*')
+        .eq('tenant_id', activeTenantId)
+        .order('created_at', { ascending: false });
+
+      if (srvError) throw srvError;
+
+      if (dbServices && dbServices.length > 0) {
+        const mapped = dbServices.map(mapServiceFromDb);
+        setServices(mapped);
+        try {
+          localStorage.setItem(`tenant_srv_${activeTenantId}`, JSON.stringify(mapped));
+        } catch {}
+      } else {
+        const defaults = getDefaultServicesForTenant(activeTenantId);
+        const toInsert = defaults.map(s => mapServiceToDb(s, activeTenantId));
+        await supabase.from('salon_services').upsert(toInsert);
+      }
+
+      // 2. Sync Stylists
+      const { data: dbStylists, error: styError } = await supabase
+        .from('salon_stylists')
+        .select('*')
+        .eq('tenant_id', activeTenantId);
+
+      if (!styError && dbStylists && dbStylists.length > 0) {
+        const mapped = dbStylists.map(mapStylistFromDb);
+        setStylists(mapped);
+        try {
+          localStorage.setItem(`tenant_sty_${activeTenantId}`, JSON.stringify(mapped));
+        } catch {}
+      }
+
+      // 3. Sync Bookings
+      const { data: dbBookings, error: bkError } = await supabase
+        .from('salon_bookings')
+        .select('*')
+        .eq('tenant_id', activeTenantId)
+        .order('created_at', { ascending: false });
+
+      if (!bkError && dbBookings && dbBookings.length > 0) {
+        const mapped = dbBookings.map(mapBookingFromDb);
+        setBookings(mapped);
+        try {
+          localStorage.setItem('luxe_salon_bookings_lkr', JSON.stringify(mapped));
+        } catch {}
+      }
+
+      setCloudSyncStatus('connected');
+      if (!silent) showToast('Database Synced!', `Connected to Supabase. Loaded ${dbServices?.length || 0} services.`, 'success');
+      return true;
+    } catch (err) {
+      console.error('Supabase syncWithCloud error:', err);
+      setCloudSyncStatus('error');
+      if (!silent) showToast('Database Error', err.message || 'Failed to sync with Supabase', 'error');
+      return false;
+    } finally {
+      setIsCloudSyncing(false);
+    }
+  };
+
   // Supabase Initial Sync & Realtime Subscriptions across all devices
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) {
@@ -213,113 +286,7 @@ export const BookingProvider = ({ children }) => {
     }
 
     let isMounted = true;
-    setIsCloudSyncing(true);
-
-    const initCloudData = async () => {
-      try {
-        // 1. Sync Services
-        const { data: dbServices, error: srvError } = await supabase
-          .from('salon_services')
-          .select('*')
-          .eq('tenant_id', activeTenantId)
-          .order('created_at', { ascending: false });
-
-        if (!srvError && isMounted) {
-          if (dbServices && dbServices.length > 0) {
-            const mapped = dbServices.map(mapServiceFromDb);
-            setServices(mapped);
-          } else {
-            // Seed defaults into database if table is empty for this tenant
-            const defaults = getDefaultServicesForTenant(activeTenantId);
-            const toInsert = defaults.map(s => mapServiceToDb(s, activeTenantId));
-            await supabase.from('salon_services').upsert(toInsert);
-          }
-        }
-
-        // 2. Sync Stylists
-        const { data: dbStylists, error: styError } = await supabase
-          .from('salon_stylists')
-          .select('*')
-          .eq('tenant_id', activeTenantId);
-
-        if (!styError && isMounted) {
-          if (dbStylists && dbStylists.length > 0) {
-            const mapped = dbStylists.map(mapStylistFromDb);
-            setStylists(mapped);
-          } else {
-            const defaults = getDefaultStylistsForTenant(activeTenantId);
-            const toInsert = defaults.map(s => mapStylistToDb(s, activeTenantId));
-            await supabase.from('salon_stylists').upsert(toInsert);
-          }
-        }
-
-        // 3. Sync Bookings
-        const { data: dbBookings, error: bkError } = await supabase
-          .from('salon_bookings')
-          .select('*')
-          .eq('tenant_id', activeTenantId)
-          .order('created_at', { ascending: false });
-
-        if (!bkError && isMounted) {
-          if (dbBookings && dbBookings.length > 0) {
-            const mapped = dbBookings.map(mapBookingFromDb);
-            setBookings(mapped);
-          } else {
-            const tenantDefaults = INITIAL_BOOKINGS.filter(b => (b.tenantId || 'luxecut') === activeTenantId);
-            if (tenantDefaults.length > 0) {
-              const toInsert = tenantDefaults.map(b => mapBookingToDb(b, activeTenantId));
-              await supabase.from('salon_bookings').upsert(toInsert);
-            }
-          }
-        }
-
-        // 4. Sync Custom Slots
-        const { data: dbSlots, error: slotError } = await supabase
-          .from('salon_custom_slots')
-          .select('*')
-          .eq('tenant_id', activeTenantId);
-
-        if (!slotError && dbSlots && isMounted) {
-          const mapped = dbSlots.map(mapCustomSlotFromDb);
-          setCustomSlots(mapped);
-        }
-
-        // 5. Sync Reviews
-        const { data: dbReviews, error: revError } = await supabase
-          .from('salon_reviews')
-          .select('*')
-          .eq('tenant_id', activeTenantId)
-          .order('created_at', { ascending: false });
-
-        if (!revError && isMounted) {
-          if (dbReviews && dbReviews.length > 0) {
-            const mapped = dbReviews.map(mapReviewFromDb);
-            setReviews(mapped);
-          } else {
-            const tenantReviews = REVIEWS.filter(r => (r.tenantId || 'luxecut') === activeTenantId);
-            if (tenantReviews.length > 0) {
-              const toInsert = tenantReviews.map(r => mapReviewToDb(r, activeTenantId));
-              await supabase.from('salon_reviews').upsert(toInsert);
-            }
-          }
-        }
-
-        if (isMounted) {
-          setCloudSyncStatus('connected');
-        }
-      } catch (err) {
-        console.warn('Supabase initial sync error:', err);
-        if (isMounted) {
-          setCloudSyncStatus('error');
-        }
-      } finally {
-        if (isMounted) {
-          setIsCloudSyncing(false);
-        }
-      }
-    };
-
-    initCloudData();
+    syncWithCloud(true);
 
     // Setup Realtime Subscriptions for immediate push notifications to this browser
     const channelName = `salon_live_${activeTenantId}`;
@@ -1130,7 +1097,6 @@ export const BookingProvider = ({ children }) => {
       } catch {}
       return updated;
     });
-    showToast('Service Added', `New service "${srvObj.name}" added to catalog.`, 'success');
 
     // 2. Realtime WebSocket Broadcast to all other open tabs/devices
     if (realtimeChannelRef.current) {
@@ -1153,10 +1119,16 @@ export const BookingProvider = ({ children }) => {
           .upsert(mapServiceToDb(srvObj, activeTenantId));
         if (error) {
           console.error('Supabase addService error:', error.message);
+          showToast('Database Error', `Saved locally, but Supabase error: ${error.message}`, 'error');
+        } else {
+          showToast('Saved to Database!', `"${srvObj.name}" added and synced to Supabase cloud.`, 'success');
         }
       } catch (err) {
         console.error('Supabase addService exception:', err);
+        showToast('Database Error', `Saved locally, but Supabase error: ${err.message}`, 'error');
       }
+    } else {
+      showToast('Saved Locally', `"${srvObj.name}" added locally (Supabase not configured).`, 'info');
     }
   };
 
@@ -1168,7 +1140,6 @@ export const BookingProvider = ({ children }) => {
       } catch {}
       return updated;
     });
-    showToast('Service Deleted', 'Service removed from catalog.', 'info');
 
     if (realtimeChannelRef.current) {
       try {
@@ -1182,10 +1153,18 @@ export const BookingProvider = ({ children }) => {
 
     if (isSupabaseConfigured && supabase) {
       try {
-        await supabase.from('salon_services').delete().eq('id', serviceId);
+        const { error } = await supabase.from('salon_services').delete().eq('id', serviceId);
+        if (error) {
+          showToast('Database Error', `Local deleted, but Supabase error: ${error.message}`, 'error');
+        } else {
+          showToast('Service Removed', 'Deleted from catalog & Supabase cloud.', 'info');
+        }
       } catch (e) {
         console.error('Supabase deleteService error:', e);
+        showToast('Database Error', `Local deleted, but Supabase error: ${e.message}`, 'error');
       }
+    } else {
+      showToast('Service Deleted', 'Service removed from catalog.', 'info');
     }
   };
 
@@ -1209,7 +1188,6 @@ export const BookingProvider = ({ children }) => {
       } catch {}
       return updated;
     });
-    showToast('Service Updated', 'Service details and photo updated.', 'success');
 
     if (realtimeChannelRef.current && finalService) {
       try {
@@ -1223,35 +1201,51 @@ export const BookingProvider = ({ children }) => {
 
     if (isSupabaseConfigured && supabase && finalService) {
       try {
-        await supabase
+        const { error } = await supabase
           .from('salon_services')
           .upsert(mapServiceToDb(finalService, activeTenantId));
+        if (error) {
+          showToast('Database Error', `Local updated, but Supabase error: ${error.message}`, 'error');
+        } else {
+          showToast('Service Saved!', 'Updated and synced to Supabase cloud.', 'success');
+        }
       } catch (e) {
         console.error('Supabase updateService error:', e);
+        showToast('Database Error', `Local updated, but Supabase error: ${e.message}`, 'error');
       }
+    } else {
+      showToast('Service Updated', 'Service details and photo updated.', 'success');
     }
   };
 
-  const deleteStylist = (stylistId) => {
+  const deleteStylist = async (stylistId) => {
     setStylists(prev => prev.filter(s => s.id !== stylistId));
     showToast('Stylist Deleted', 'Stylist removed from team roster.', 'info');
 
     if (isSupabaseConfigured && supabase) {
-      supabase.from('salon_stylists').delete().eq('id', stylistId).catch(console.warn);
+      try {
+        await supabase.from('salon_stylists').delete().eq('id', stylistId);
+      } catch (e) {
+        console.warn('Supabase deleteStylist error:', e);
+      }
     }
   };
 
-  const deleteBooking = (bookingId) => {
+  const deleteBooking = async (bookingId) => {
     setBookings(prev => prev.filter(b => b.id !== bookingId));
     showToast('Appointment Removed', `Booking #${bookingId} deleted.`, 'info');
 
     if (isSupabaseConfigured && supabase) {
-      supabase.from('salon_bookings').delete().eq('id', bookingId).catch(console.warn);
+      try {
+        await supabase.from('salon_bookings').delete().eq('id', bookingId);
+      } catch (e) {
+        console.warn('Supabase deleteBooking error:', e);
+      }
     }
   };
 
   // Stylist Management Functions
-  const addStylist = (newStylist) => {
+  const addStylist = async (newStylist) => {
     const stylistObj = {
       id: `st-${Date.now()}`,
       name: newStylist.name,
@@ -1275,13 +1269,22 @@ export const BookingProvider = ({ children }) => {
     };
 
     setStylists(prev => [...prev, stylistObj]);
-    showToast('Stylist Added', `Added ${stylistObj.name} to team roster.`, 'success');
 
     if (isSupabaseConfigured && supabase) {
-      supabase
-        .from('salon_stylists')
-        .upsert(mapStylistToDb(stylistObj, activeTenantId))
-        .catch(console.warn);
+      try {
+        const { error } = await supabase
+          .from('salon_stylists')
+          .upsert(mapStylistToDb(stylistObj, activeTenantId));
+        if (error) {
+          showToast('Database Error', `Saved locally, but Supabase error: ${error.message}`, 'error');
+        } else {
+          showToast('Stylist Saved!', `Added ${stylistObj.name} and synced to Supabase cloud.`, 'success');
+        }
+      } catch (err) {
+        showToast('Database Error', `Saved locally, but Supabase error: ${err.message}`, 'error');
+      }
+    } else {
+      showToast('Stylist Added', `Added ${stylistObj.name} to team roster.`, 'success');
     }
   };
 
@@ -1441,6 +1444,7 @@ export const BookingProvider = ({ children }) => {
         isSupabaseConfigured,
         cloudSyncStatus,
         isCloudSyncing,
+        syncWithCloud,
         availableTenants: Object.values(customTenantConfigs)
       }}
     >

@@ -46,7 +46,8 @@ export const AdminDashboard = () => {
     getStylistSlotsForDate,
     isSupabaseConfigured,
     cloudSyncStatus,
-    isCloudSyncing
+    isCloudSyncing,
+    syncWithCloud
   } = useBooking();
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
@@ -155,54 +156,78 @@ export const AdminDashboard = () => {
   // Edit Service Modal state
   const [editingService, setEditingService] = useState(null);
 
-  // File Upload Handlers (FileReader converts device photos to Data URL)
-  const handleEditServicePhotoUpload = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      showToast('File Too Large', 'Please select a photo smaller than 5MB.', 'error');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (uploadEvent) => {
-      setEditingService(prev => ({ ...prev, image: uploadEvent.target.result }));
-      showToast('Photo Loaded', 'Service photo updated.', 'success');
-    };
-    reader.readAsDataURL(file);
+  // Helper to compress uploaded device photos to max 800px & ~50KB so they sync instantly over cloud
+  const compressImageFile = (file, maxWidth = 800, maxHeight = 800, quality = 0.8) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          let width = img.width;
+          let height = img.height;
+          if (width > maxWidth || height > maxHeight) {
+            if (width > height) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            } else {
+              width = Math.round((width * maxHeight) / height);
+              height = maxHeight;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = reject;
+        img.src = e.target.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
   };
 
-  const handleServicePhotoUpload = (e) => {
+  // File Upload Handlers (Auto-resizes & compresses camera photos)
+  const handleEditServicePhotoUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      showToast('File Too Large', 'Please select a photo smaller than 5MB.', 'error');
-      return;
+    try {
+      const compressed = await compressImageFile(file);
+      setEditingService(prev => ({ ...prev, image: compressed }));
+      showToast('Photo Loaded', 'Service photo optimized & ready.', 'success');
+    } catch {
+      showToast('Photo Error', 'Could not process selected image.', 'error');
     }
-    const reader = new FileReader();
-    reader.onload = (uploadEvent) => {
-      setNewSrvForm(prev => ({ ...prev, image: uploadEvent.target.result }));
-      showToast('Photo Loaded', 'Service photo uploaded successfully.', 'success');
-    };
-    reader.readAsDataURL(file);
   };
 
-  const handleStylistPhotoUpload = (e, isEditing = false) => {
+  const handleServicePhotoUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      showToast('File Too Large', 'Please select an image smaller than 5MB.', 'error');
-      return;
+    try {
+      const compressed = await compressImageFile(file);
+      setNewSrvForm(prev => ({ ...prev, image: compressed }));
+      showToast('Photo Loaded', 'Service photo optimized & attached.', 'success');
+    } catch {
+      showToast('Photo Error', 'Could not process selected image.', 'error');
     }
-    const reader = new FileReader();
-    reader.onload = (uploadEvent) => {
+  };
+
+  const handleStylistPhotoUpload = async (e, isEditing = false) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const compressed = await compressImageFile(file);
       if (isEditing) {
-        setEditingStylist(prev => ({ ...prev, image: uploadEvent.target.result }));
+        setEditingStylist(prev => ({ ...prev, image: compressed }));
       } else {
-        setNewStylistForm(prev => ({ ...prev, image: uploadEvent.target.result }));
+        setNewStylistForm(prev => ({ ...prev, image: compressed }));
       }
-      showToast('Portrait Loaded', 'Stylist photo updated.', 'success');
-    };
-    reader.readAsDataURL(file);
+      showToast('Portrait Loaded', 'Stylist photo optimized & updated.', 'success');
+    } catch {
+      showToast('Photo Error', 'Could not process selected image.', 'error');
+    }
   };
 
   // STRICT CLIENT DATA ISOLATION:
@@ -520,7 +545,7 @@ export const AdminDashboard = () => {
           <h2 className="text-2xl sm:text-3xl font-serif font-bold text-white">
             Manager <span className="gold-gradient-text">Admin Dashboard</span>
           </h2>
-          <div className="flex items-center gap-2 mt-2">
+          <div className="flex flex-wrap items-center gap-2 mt-2">
             {cloudSyncStatus === 'connected' ? (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -537,6 +562,16 @@ export const AdminDashboard = () => {
                 Local Storage Mode (Supabase not connected)
               </span>
             )}
+
+            <button
+              onClick={() => syncWithCloud(false)}
+              disabled={isCloudSyncing}
+              className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-white/10 transition-colors disabled:opacity-50"
+              title="Force sync database with Supabase cloud"
+            >
+              <RefreshCw className={`w-3 h-3 ${isCloudSyncing ? 'animate-spin text-amber-400' : ''}`} />
+              {isCloudSyncing ? 'Syncing...' : 'Sync Database'}
+            </button>
           </div>
         </div>
 
