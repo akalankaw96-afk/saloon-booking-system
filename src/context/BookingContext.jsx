@@ -14,12 +14,30 @@ import {
   getActiveTenantId, 
   formatCurrency, 
   generateWhatsAppLink,
+  generateAdminWhatsAppLink,
+  generateAdminWhatsAppMessage,
+  generateStylistWhatsAppLink,
+  generateStylistWhatsAppMessage,
   generateCustomerPhoneMessage,
   generateCustomerWhatsAppLink,
   generateCustomerSmsLink,
   formatPhoneForMessaging
 } from '../config/tenants';
 import confetti from 'canvas-confetti';
+import {
+  supabase,
+  isSupabaseConfigured,
+  mapServiceFromDb,
+  mapServiceToDb,
+  mapStylistFromDb,
+  mapStylistToDb,
+  mapBookingFromDb,
+  mapBookingToDb,
+  mapCustomSlotFromDb,
+  mapCustomSlotToDb,
+  mapReviewFromDb,
+  mapReviewToDb
+} from '../lib/supabase';
 
 const BookingContext = createContext();
 
@@ -68,6 +86,8 @@ export const BookingProvider = ({ children }) => {
             status: s.status || 'active',
             liveStatus: s.liveStatus || matchedDef.liveStatus || 'available',
             pin: s.pin || matchedDef.pin || `100${idx + 1}`,
+            phone: s.phone || matchedDef.phone || '+94 77 111 2233',
+            whatsapp: s.whatsapp || matchedDef.whatsapp || '94771112233',
             shiftStart: s.shiftStart || '09:00 AM',
             shiftEnd: s.shiftEnd || '07:00 PM',
             breakStart: s.breakStart || '01:00 PM',
@@ -84,6 +104,8 @@ export const BookingProvider = ({ children }) => {
       status: s.status || 'active',
       liveStatus: s.liveStatus || 'available',
       pin: s.pin || `100${idx + 1}`,
+      phone: s.phone || '+94 77 111 2233',
+      whatsapp: s.whatsapp || '94771112233',
       shiftStart: s.shiftStart || '09:00 AM',
       shiftEnd: s.shiftEnd || '07:00 PM',
       breakStart: s.breakStart || '01:00 PM',
@@ -145,6 +167,225 @@ export const BookingProvider = ({ children }) => {
       return REVIEWS;
     }
   });
+
+  // Cloud Synchronization State (Supabase Realtime)
+  const [isCloudSyncing, setIsCloudSyncing] = useState(false);
+  const [cloudSyncStatus, setCloudSyncStatus] = useState(isSupabaseConfigured ? 'connecting' : 'local-only');
+
+  // Supabase Initial Sync & Realtime Subscriptions across all devices
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) {
+      setCloudSyncStatus('local-only');
+      return;
+    }
+
+    let isMounted = true;
+    setIsCloudSyncing(true);
+
+    const initCloudData = async () => {
+      try {
+        // 1. Sync Services
+        const { data: dbServices, error: srvError } = await supabase
+          .from('salon_services')
+          .select('*')
+          .eq('tenant_id', activeTenantId)
+          .order('created_at', { ascending: false });
+
+        if (!srvError && isMounted) {
+          if (dbServices && dbServices.length > 0) {
+            const mapped = dbServices.map(mapServiceFromDb);
+            setServices(mapped);
+          } else {
+            // Seed defaults into database if table is empty for this tenant
+            const defaults = getDefaultServicesForTenant(activeTenantId);
+            const toInsert = defaults.map(s => mapServiceToDb(s, activeTenantId));
+            await supabase.from('salon_services').upsert(toInsert);
+          }
+        }
+
+        // 2. Sync Stylists
+        const { data: dbStylists, error: styError } = await supabase
+          .from('salon_stylists')
+          .select('*')
+          .eq('tenant_id', activeTenantId);
+
+        if (!styError && isMounted) {
+          if (dbStylists && dbStylists.length > 0) {
+            const mapped = dbStylists.map(mapStylistFromDb);
+            setStylists(mapped);
+          } else {
+            const defaults = getDefaultStylistsForTenant(activeTenantId);
+            const toInsert = defaults.map(s => mapStylistToDb(s, activeTenantId));
+            await supabase.from('salon_stylists').upsert(toInsert);
+          }
+        }
+
+        // 3. Sync Bookings
+        const { data: dbBookings, error: bkError } = await supabase
+          .from('salon_bookings')
+          .select('*')
+          .eq('tenant_id', activeTenantId)
+          .order('created_at', { ascending: false });
+
+        if (!bkError && isMounted) {
+          if (dbBookings && dbBookings.length > 0) {
+            const mapped = dbBookings.map(mapBookingFromDb);
+            setBookings(mapped);
+          } else {
+            const tenantDefaults = INITIAL_BOOKINGS.filter(b => (b.tenantId || 'luxecut') === activeTenantId);
+            if (tenantDefaults.length > 0) {
+              const toInsert = tenantDefaults.map(b => mapBookingToDb(b, activeTenantId));
+              await supabase.from('salon_bookings').upsert(toInsert);
+            }
+          }
+        }
+
+        // 4. Sync Custom Slots
+        const { data: dbSlots, error: slotError } = await supabase
+          .from('salon_custom_slots')
+          .select('*')
+          .eq('tenant_id', activeTenantId);
+
+        if (!slotError && dbSlots && isMounted) {
+          const mapped = dbSlots.map(mapCustomSlotFromDb);
+          setCustomSlots(mapped);
+        }
+
+        // 5. Sync Reviews
+        const { data: dbReviews, error: revError } = await supabase
+          .from('salon_reviews')
+          .select('*')
+          .eq('tenant_id', activeTenantId)
+          .order('created_at', { ascending: false });
+
+        if (!revError && isMounted) {
+          if (dbReviews && dbReviews.length > 0) {
+            const mapped = dbReviews.map(mapReviewFromDb);
+            setReviews(mapped);
+          } else {
+            const tenantReviews = REVIEWS.filter(r => (r.tenantId || 'luxecut') === activeTenantId);
+            if (tenantReviews.length > 0) {
+              const toInsert = tenantReviews.map(r => mapReviewToDb(r, activeTenantId));
+              await supabase.from('salon_reviews').upsert(toInsert);
+            }
+          }
+        }
+
+        if (isMounted) {
+          setCloudSyncStatus('connected');
+        }
+      } catch (err) {
+        console.warn('Supabase initial sync error:', err);
+        if (isMounted) {
+          setCloudSyncStatus('error');
+        }
+      } finally {
+        if (isMounted) {
+          setIsCloudSyncing(false);
+        }
+      }
+    };
+
+    initCloudData();
+
+    // Setup Realtime Subscriptions for immediate push notifications to this browser
+    const channelName = `realtime_${activeTenantId}_${Date.now()}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'salon_services', filter: `tenant_id=eq.${activeTenantId}` },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const newService = mapServiceFromDb(payload.new);
+            setServices(prev => {
+              if (prev.some(s => s.id === newService.id)) return prev;
+              return [newService, ...prev];
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            const updated = mapServiceFromDb(payload.new);
+            setServices(prev => prev.map(s => s.id === updated.id ? updated : s));
+          } else if (payload.eventType === 'DELETE') {
+            setServices(prev => prev.filter(s => s.id !== payload.old.id));
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'salon_stylists', filter: `tenant_id=eq.${activeTenantId}` },
+        (payload) => {
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            const updated = mapStylistFromDb(payload.new);
+            setStylists(prev => {
+              const exists = prev.some(s => s.id === updated.id);
+              if (exists) {
+                return prev.map(s => s.id === updated.id ? updated : s);
+              }
+              return [...prev, updated];
+            });
+          } else if (payload.eventType === 'DELETE') {
+            setStylists(prev => prev.filter(s => s.id !== payload.old.id));
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'salon_bookings', filter: `tenant_id=eq.${activeTenantId}` },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const newBk = mapBookingFromDb(payload.new);
+            setBookings(prev => {
+              if (prev.some(b => b.id === newBk.id)) return prev;
+              return [newBk, ...prev];
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            const updated = mapBookingFromDb(payload.new);
+            setBookings(prev => prev.map(b => b.id === updated.id ? updated : b));
+          } else if (payload.eventType === 'DELETE') {
+            setBookings(prev => prev.filter(b => b.id !== payload.old.id));
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'salon_custom_slots', filter: `tenant_id=eq.${activeTenantId}` },
+        (payload) => {
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            const updated = mapCustomSlotFromDb(payload.new);
+            setCustomSlots(prev => {
+              const filtered = prev.filter(s => s.id !== updated.id);
+              return [...filtered, updated];
+            });
+          } else if (payload.eventType === 'DELETE') {
+            setCustomSlots(prev => prev.filter(s => s.id !== payload.old.id));
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'salon_reviews', filter: `tenant_id=eq.${activeTenantId}` },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const newRev = mapReviewFromDb(payload.new);
+            setReviews(prev => {
+              if (prev.some(r => r.id === newRev.id)) return prev;
+              return [newRev, ...prev];
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            const updated = mapReviewFromDb(payload.new);
+            setReviews(prev => prev.map(r => r.id === updated.id ? updated : r));
+          } else if (payload.eventType === 'DELETE') {
+            setReviews(prev => prev.filter(r => r.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(channel);
+    };
+  }, [activeTenantId]);
 
   // Active View Tab
   const [activeTab, setActiveTab] = useState('services'); // 'services' | 'portfolio' | 'reviews' | 'my-bookings' | 'admin'
@@ -292,6 +533,10 @@ export const BookingProvider = ({ children }) => {
 
   const formatPrice = (amount) => formatCurrency(amount, tenant);
   const getWhatsAppAlertUrl = (booking) => generateWhatsAppLink(booking, tenant);
+  const getAdminWhatsAppUrl = (booking = activePassBooking) => generateAdminWhatsAppLink(booking, tenant);
+  const getAdminWhatsAppMessage = (booking = activePassBooking) => generateAdminWhatsAppMessage(booking, tenant);
+  const getStylistWhatsAppUrl = (booking = activePassBooking) => generateStylistWhatsAppLink(booking, tenant, stylists);
+  const getStylistWhatsAppMessage = (booking = activePassBooking) => generateStylistWhatsAppMessage(booking, tenant);
   const getCustomerPhoneMessage = (booking = activePassBooking) => generateCustomerPhoneMessage(booking, tenant);
   const getCustomerWhatsAppUrl = (booking = activePassBooking) => generateCustomerWhatsAppLink(booking, tenant);
   const getCustomerSmsUrl = (booking = activePassBooking) => generateCustomerSmsLink(booking, tenant);
@@ -416,6 +661,14 @@ export const BookingProvider = ({ children }) => {
       'on-break': '☕ On Short Break'
     };
     showToast('Chair Status Updated', statusLabels[status] || status, 'info');
+
+    if (isSupabaseConfigured && supabase) {
+      supabase
+        .from('salon_stylists')
+        .update({ live_status: status })
+        .eq('id', stylistId)
+        .catch(console.warn);
+    }
   };
 
   // Seat a Walk-in Guest Immediately & Block Slot from Online Booking
@@ -450,6 +703,14 @@ export const BookingProvider = ({ children }) => {
     updateStylistLiveStatus(targetStylist.id, 'in-chair');
 
     showToast('Walk-in Seated!', `${customerName || 'Walk-in Guest'} seated for ${targetService?.name} at ${time}. Slot locked!`, 'success');
+
+    if (isSupabaseConfigured && supabase) {
+      supabase
+        .from('salon_bookings')
+        .upsert(mapBookingToDb(newBooking, activeTenantId))
+        .catch(console.warn);
+    }
+
     return newBooking;
   };
 
@@ -482,6 +743,14 @@ export const BookingProvider = ({ children }) => {
 
     setBookings(prev => [newHold, ...prev]);
     showToast('Slot Reserved for Queue', `Slot ${time} reserved for walk-in waiting queue. Online booking locked out.`, 'info');
+
+    if (isSupabaseConfigured && supabase) {
+      supabase
+        .from('salon_bookings')
+        .upsert(mapBookingToDb(newHold, activeTenantId))
+        .catch(console.warn);
+    }
+
     return newHold;
   };
 
@@ -591,12 +860,30 @@ export const BookingProvider = ({ children }) => {
       showToast('Slot Added!', `New slot ${cleanTime} added to ${targetStylist.name}'s timetable on ${targetDate}. Open for bookings!`, 'success');
     }
 
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('salon_custom_slots').upsert(mapCustomSlotToDb(newCustomSlot, activeTenantId)).catch(console.warn);
+      if (createdBooking) {
+        supabase.from('salon_bookings').upsert(mapBookingToDb(createdBooking, activeTenantId)).catch(console.warn);
+      }
+    }
+
     return { customSlot: newCustomSlot, booking: createdBooking };
   };
 
   const removeStylistSlot = (stylistId, date, time) => {
     setCustomSlots(prev => prev.filter(s => !(s.stylistId === stylistId && s.date === date && s.time === time)));
     showToast('Slot Removed', `Slot ${time} removed from timetable.`, 'info');
+
+    if (isSupabaseConfigured && supabase) {
+      supabase
+        .from('salon_custom_slots')
+        .delete()
+        .eq('tenant_id', activeTenantId)
+        .eq('stylist_id', stylistId)
+        .eq('date', date)
+        .eq('time', time)
+        .catch(console.warn);
+    }
   };
 
   const showToast = (title, message, type = 'success') => {
@@ -689,6 +976,13 @@ export const BookingProvider = ({ children }) => {
 
     showToast('Booking Confirmed!', `Your appointment #${newBooking.id} is scheduled for ${newBooking.date} at ${newBooking.time}.`, 'success');
     
+    if (isSupabaseConfigured && supabase) {
+      supabase
+        .from('salon_bookings')
+        .upsert(mapBookingToDb(newBooking, activeTenantId))
+        .catch(console.warn);
+    }
+
     // Open digital pass
     setActivePassBooking(newBooking);
   };
@@ -718,6 +1012,10 @@ export const BookingProvider = ({ children }) => {
       prev.map(b => (b.id === bookingId ? { ...b, status: newStatus } : b))
     );
     showToast('Status Updated', `Appointment ${bookingId} marked as ${newStatus}.`, 'info');
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('salon_bookings').update({ status: newStatus }).eq('id', bookingId).catch(console.warn);
+    }
   };
 
   const cancelBooking = (bookingId) => {
@@ -730,6 +1028,14 @@ export const BookingProvider = ({ children }) => {
     );
     setRescheduleBookingTarget(null);
     showToast('Rescheduled!', `Appointment ${bookingId} has been moved to ${newDate} at ${newTime}.`, 'success');
+
+    if (isSupabaseConfigured && supabase) {
+      supabase
+        .from('salon_bookings')
+        .update({ date: newDate, time: newTime, status: 'confirmed' })
+        .eq('id', bookingId)
+        .catch(console.warn);
+    }
   };
 
   const addService = (newSrv) => {
@@ -747,38 +1053,66 @@ export const BookingProvider = ({ children }) => {
     };
     setServices(prev => [srvObj, ...prev]);
     showToast('Service Added', `New service "${srvObj.name}" added to catalog.`, 'success');
+
+    if (isSupabaseConfigured && supabase) {
+      supabase
+        .from('salon_services')
+        .upsert(mapServiceToDb(srvObj, activeTenantId))
+        .catch(console.warn);
+    }
   };
 
   const deleteService = (serviceId) => {
     setServices(prev => prev.filter(s => s.id !== serviceId));
     showToast('Service Deleted', 'Service removed from catalog.', 'info');
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('salon_services').delete().eq('id', serviceId).catch(console.warn);
+    }
   };
 
   const updateService = (id, updatedData) => {
+    let finalService = null;
     setServices(prev =>
       prev.map(s => {
         if (s.id === id) {
-          return {
+          finalService = {
             ...s,
             ...updatedData,
             price: Number(updatedData.price) || s.price,
             duration: Number(updatedData.duration) || s.duration
           };
+          return finalService;
         }
         return s;
       })
     );
     showToast('Service Updated', 'Service details and photo updated.', 'success');
+
+    if (isSupabaseConfigured && supabase && finalService) {
+      supabase
+        .from('salon_services')
+        .upsert(mapServiceToDb(finalService, activeTenantId))
+        .catch(console.warn);
+    }
   };
 
   const deleteStylist = (stylistId) => {
     setStylists(prev => prev.filter(s => s.id !== stylistId));
     showToast('Stylist Deleted', 'Stylist removed from team roster.', 'info');
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('salon_stylists').delete().eq('id', stylistId).catch(console.warn);
+    }
   };
 
   const deleteBooking = (bookingId) => {
     setBookings(prev => prev.filter(b => b.id !== bookingId));
     showToast('Appointment Removed', `Booking #${bookingId} deleted.`, 'info');
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('salon_bookings').delete().eq('id', bookingId).catch(console.warn);
+    }
   };
 
   // Stylist Management Functions
@@ -792,8 +1126,12 @@ export const BookingProvider = ({ children }) => {
       rating: 5.0,
       reviewsCount: 1,
       image: newStylist.image || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+      pin: newStylist.pin || '1005',
+      phone: newStylist.phone || '+94 77 111 2233',
+      whatsapp: newStylist.whatsapp || '94771112233',
       specialties: newStylist.specialties || ['cut-style'],
       status: 'active',
+      liveStatus: 'available',
       shiftStart: newStylist.shiftStart || '09:00 AM',
       shiftEnd: newStylist.shiftEnd || '06:00 PM',
       breakStart: newStylist.breakStart || '01:00 PM',
@@ -803,36 +1141,56 @@ export const BookingProvider = ({ children }) => {
 
     setStylists(prev => [...prev, stylistObj]);
     showToast('Stylist Added', `Added ${stylistObj.name} to team roster.`, 'success');
+
+    if (isSupabaseConfigured && supabase) {
+      supabase
+        .from('salon_stylists')
+        .upsert(mapStylistToDb(stylistObj, activeTenantId))
+        .catch(console.warn);
+    }
   };
 
   const updateStylist = (id, updatedData) => {
+    let finalStylist = null;
     setStylists(prev =>
       prev.map(s => {
         if (s.id === id) {
-          const updated = { ...s, ...updatedData };
+          finalStylist = { ...s, ...updatedData };
           if (activeStylist && activeStylist.id === id) {
-            setActiveStylist(updated);
-            localStorage.setItem(`active_stylist_${activeTenantId}`, JSON.stringify(updated));
+            setActiveStylist(finalStylist);
+            localStorage.setItem(`active_stylist_${activeTenantId}`, JSON.stringify(finalStylist));
           }
-          return updated;
+          return finalStylist;
         }
         return s;
       })
     );
     showToast('Profile Updated', 'Stylist profile & timetable preferences saved.', 'success');
+
+    if (isSupabaseConfigured && supabase && finalStylist) {
+      supabase
+        .from('salon_stylists')
+        .upsert(mapStylistToDb(finalStylist, activeTenantId))
+        .catch(console.warn);
+    }
   };
 
   const toggleStylistDuty = (id) => {
+    let nextStatus = 'active';
     setStylists(prev =>
       prev.map(s => {
         if (s.id === id) {
-          const nextStatus = s.status === 'active' ? 'on-leave' : 'active';
+          nextStatus = s.status === 'active' ? 'on-leave' : 'active';
           showToast('Duty Status', `${s.name} status set to ${nextStatus}.`, 'info');
           return { ...s, status: nextStatus };
         }
         return s;
       })
     );
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('salon_stylists').update({ status: nextStatus }).eq('id', id).catch(console.warn);
+    }
   };
 
   const addReview = (newReview) => {
@@ -848,6 +1206,13 @@ export const BookingProvider = ({ children }) => {
     };
     setReviews(prev => [reviewObj, ...prev]);
     showToast('Thank You!', 'Your review has been submitted successfully.', 'success');
+
+    if (isSupabaseConfigured && supabase) {
+      supabase
+        .from('salon_reviews')
+        .upsert(mapReviewToDb(reviewObj, activeTenantId))
+        .catch(console.warn);
+    }
   };
 
   // Only return bookings that belong to this guest device session AND current salon
@@ -930,10 +1295,17 @@ export const BookingProvider = ({ children }) => {
         updateTenantConfig,
         formatPrice,
         getWhatsAppAlertUrl,
+        getAdminWhatsAppUrl,
+        getAdminWhatsAppMessage,
+        getStylistWhatsAppUrl,
+        getStylistWhatsAppMessage,
         getCustomerPhoneMessage,
         getCustomerWhatsAppUrl,
         getCustomerSmsUrl,
         getDirectSalonLink,
+        isSupabaseConfigured,
+        cloudSyncStatus,
+        isCloudSyncing,
         availableTenants: Object.values(customTenantConfigs)
       }}
     >

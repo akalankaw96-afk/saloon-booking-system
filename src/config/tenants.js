@@ -257,31 +257,87 @@ export const generateCustomerWhatsAppLink = (booking, tenant) => {
   return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
 };
 
-// Direct SMS link to customer's phone
+// Helper: Direct SMS link to customer's phone
 export const generateCustomerSmsLink = (booking, tenant) => {
   const cleanPhone = formatPhoneForMessaging(booking?.phone);
   const text = generateCustomerPhoneMessage(booking, tenant);
   return `sms:${cleanPhone}?body=${encodeURIComponent(text)}`;
 };
 
-// Helper to generate a pre-filled WhatsApp booking alert message to Salon reception
-export const generateWhatsAppLink = (booking, tenant) => {
-  if (!tenant?.contact?.whatsapp) return null;
-  const phone = tenant.contact.whatsapp.replace(/[^0-9]/g, '');
+// Helper: Generate structured WhatsApp alert message for Salon Admin / Reception
+export const generateAdminWhatsAppMessage = (booking, tenant) => {
+  if (!booking) return '';
   const currencySymbol = tenant?.currency?.symbol || 'Rs.';
+  const salonName = tenant?.fullName || tenant?.name || 'Salon Studio';
   
-  const text = `*New Booking Request - ${tenant.fullName}*
-------------------------------
-*Booking Ref:* ${booking.id}
-*Customer:* ${booking.customerName}
-*Phone:* ${booking.phone}
-*Service:* ${booking.serviceName}
-*Specialist:* ${booking.stylistName}
-*Date & Time:* ${booking.date} at ${booking.time}
-*Total Value:* ${currencySymbol} ${Number(booking.totalPrice || 0).toLocaleString()}
-*Payment:* ${booking.paymentMethod === 'deposit' ? 'Deposit Reserved' : 'Pay at Venue'}
-${booking.notes ? `*Notes:* ${booking.notes}\n` : ''}------------------------------
-Sent via ${tenant.name} Online Booking Pass`;
+  return `🚨 *NEW APPOINTMENT ALERT - SALON ADMIN* 🚨
+*${salonName}*
 
+A new booking has just been confirmed online!
+
+📋 *Reservation Summary:*
+• Booking Ref: #${booking.id}
+• Guest Name: ${booking.customerName || 'Valued Guest'}
+• Contact Phone: ${booking.phone || 'N/A'}
+• Treatment: ${booking.serviceName}
+• Specialist Assigned: ${booking.stylistName || 'First Available'}
+• Scheduled Date: ${booking.date}
+• Scheduled Time: ${booking.time}
+• Service Value: ${currencySymbol} ${Number(booking.totalPrice || 0).toLocaleString()}
+• Payment Mode: ${booking.paymentMethod === 'deposit' ? 'Deposit Paid Online' : 'Pay at Venue / Front Desk'}
+${booking.notes ? `• Guest Request / Notes: "${booking.notes}"\n` : ''}
+🏢 Logged in Salon Master Timetable`;
+};
+
+// Helper: Direct WhatsApp link to Salon Admin / Reception Desk
+export const generateAdminWhatsAppLink = (booking, tenant) => {
+  const phone = formatPhoneForMessaging(tenant?.contact?.whatsapp || tenant?.contact?.phone);
+  const text = generateAdminWhatsAppMessage(booking, tenant);
+  if (!phone) {
+    return `https://wa.me/?text=${encodeURIComponent(text)}`;
+  }
   return `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
 };
+
+// Helper: Generate structured WhatsApp alert message for the Assigned Stylist
+export const generateStylistWhatsAppMessage = (booking, tenant) => {
+  if (!booking) return '';
+  const salonName = tenant?.fullName || tenant?.name || 'Salon Studio';
+  const currencySymbol = tenant?.currency?.symbol || 'Rs.';
+  const stylistName = booking.stylistName || 'Specialist';
+  
+  return `✂️ *NEW CLIENT APPOINTMENT ASSIGNED* ✂️
+*${salonName}*
+
+Hello ${stylistName}, a new client has been booked into your station schedule!
+
+📋 *Client & Slot Details:*
+• Booking Ref: #${booking.id}
+• Guest Name: ${booking.customerName || 'Guest'}
+• Guest Contact: ${booking.phone || 'N/A'}
+• Service Booked: ${booking.serviceName}
+• Appointment Date: ${booking.date}
+• Appointment Time: ${booking.time}
+• Price / Value: ${currencySymbol} ${Number(booking.totalPrice || 0).toLocaleString()}
+${booking.notes ? `• Client Notes / Preferences: "${booking.notes}"\n` : ''}
+Please ensure your chair & tools are prepped 5 minutes prior to the slot. Thank you!`;
+};
+
+// Helper: Direct WhatsApp link to the Assigned Stylist's phone
+export const generateStylistWhatsAppLink = (booking, tenant, stylists = []) => {
+  const matchedStylist = stylists.find(s => s.id === booking?.stylistId);
+  const rawPhone = matchedStylist?.whatsapp || matchedStylist?.phone || (booking?.stylistId === 'any' ? (tenant?.contact?.whatsapp || tenant?.contact?.phone) : '');
+  const cleanPhone = formatPhoneForMessaging(rawPhone);
+  const text = generateStylistWhatsAppMessage(booking, tenant);
+  
+  if (!cleanPhone) {
+    return `https://wa.me/?text=${encodeURIComponent(text)}`;
+  }
+  return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
+};
+
+// Legacy helper for backward compatibility
+export const generateWhatsAppLink = (booking, tenant) => {
+  return generateAdminWhatsAppLink(booking, tenant);
+};
+

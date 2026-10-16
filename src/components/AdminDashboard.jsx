@@ -43,7 +43,10 @@ export const AdminDashboard = () => {
     seatWalkIn,
     holdSlotForQueue,
     completeChairBooking,
-    getStylistSlotsForDate
+    getStylistSlotsForDate,
+    isSupabaseConfigured,
+    cloudSyncStatus,
+    isCloudSyncing
   } = useBooking();
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
@@ -517,6 +520,24 @@ export const AdminDashboard = () => {
           <h2 className="text-2xl sm:text-3xl font-serif font-bold text-white">
             Manager <span className="gold-gradient-text">Admin Dashboard</span>
           </h2>
+          <div className="flex items-center gap-2 mt-2">
+            {cloudSyncStatus === 'connected' ? (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Live Cloud Sync (Supabase Active)
+              </span>
+            ) : cloudSyncStatus === 'connecting' ? (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/30">
+                <RefreshCw className="w-3 h-3 animate-spin text-blue-400" />
+                Connecting Cloud...
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/30" title="Add Supabase credentials to sync across phones and computers in real time">
+                <AlertCircle className="w-3 h-3 text-amber-400" />
+                Local Storage Mode (Supabase not connected)
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Tab Buttons & Date Selector */}
@@ -1292,6 +1313,33 @@ export const AdminDashboard = () => {
               <Plus className="w-4 h-4 stroke-[3]" />
               <span>Add New Service</span>
             </button>
+          </div>
+
+          {/* Sync Status Info Banner */}
+          <div className={`p-3.5 rounded-xl border text-xs flex items-center justify-between gap-3 ${
+            cloudSyncStatus === 'connected'
+              ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-300'
+              : 'bg-amber-950/30 border-amber-500/30 text-amber-200'
+          }`}>
+            <div className="flex items-center gap-2.5">
+              {cloudSyncStatus === 'connected' ? (
+                <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+              ) : (
+                <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+              )}
+              <span>
+                {cloudSyncStatus === 'connected' ? (
+                  <><strong>Live Cloud Sync Active:</strong> Adding or editing a service here updates your phone, reception tablet, and clients in real-time.</>
+                ) : (
+                  <><strong>Local Browser Storage:</strong> Services added here are currently saved on this device only. Connect Supabase to sync across your phone and all browsers.</>
+                )}
+              </span>
+            </div>
+            {cloudSyncStatus !== 'connected' && (
+              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0">
+                Local Only
+              </span>
+            )}
           </div>
 
           {/* Services Grid */}
