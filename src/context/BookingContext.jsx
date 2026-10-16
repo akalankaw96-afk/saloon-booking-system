@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { 
   SERVICES, 
   STYLISTS, 
@@ -171,6 +171,39 @@ export const BookingProvider = ({ children }) => {
   // Cloud Synchronization State (Supabase Realtime)
   const [isCloudSyncing, setIsCloudSyncing] = useState(false);
   const [cloudSyncStatus, setCloudSyncStatus] = useState(isSupabaseConfigured ? 'connecting' : 'local-only');
+  const realtimeChannelRef = useRef(null);
+
+  // Cross-Tab instant sync for tabs in the same browser
+  useEffect(() => {
+    const handleStorage = (e) => {
+      if (e.key === `tenant_srv_${activeTenantId}` && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          setServices(parsed);
+        } catch {}
+      }
+      if (e.key === `tenant_sty_${activeTenantId}` && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          setStylists(parsed);
+        } catch {}
+      }
+      if (e.key === 'luxe_salon_bookings_lkr' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          setBookings(parsed);
+        } catch {}
+      }
+      if (e.key === 'salon_custom_slots' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          setCustomSlots(parsed);
+        } catch {}
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [activeTenantId]);
 
   // Supabase Initial Sync & Realtime Subscriptions across all devices
   useEffect(() => {
@@ -289,21 +322,47 @@ export const BookingProvider = ({ children }) => {
     initCloudData();
 
     // Setup Realtime Subscriptions for immediate push notifications to this browser
-    const channelName = `realtime_${activeTenantId}_${Date.now()}`;
+    const channelName = `salon_live_${activeTenantId}`;
     const channel = supabase
-      .channel(channelName)
+      .channel(channelName, {
+        config: {
+          broadcast: { self: false }
+        }
+      })
+      .on('broadcast', { event: 'service_change' }, ({ payload }) => {
+        if (payload?.type === 'add' && payload.service) {
+          setServices(prev => {
+            if (prev.some(s => s.id === payload.service.id)) return prev;
+            return [payload.service, ...prev];
+          });
+        } else if (payload?.type === 'delete' && payload.id) {
+          setServices(prev => prev.filter(s => s.id !== payload.id));
+        } else if (payload?.type === 'update' && payload.service) {
+          setServices(prev => prev.map(s => s.id === payload.service.id ? payload.service : s));
+        }
+      })
+      .on('broadcast', { event: 'booking_change' }, ({ payload }) => {
+        if (payload?.type === 'add' && payload.booking) {
+          setBookings(prev => {
+            if (prev.some(b => b.id === payload.booking.id)) return prev;
+            return [payload.booking, ...prev];
+          });
+        }
+      })
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'salon_services', filter: `tenant_id=eq.${activeTenantId}` },
+        { event: '*', schema: 'public', table: 'salon_services' },
         (payload) => {
           if (payload.eventType === 'INSERT') {
             const newService = mapServiceFromDb(payload.new);
+            if (newService.tenantId && newService.tenantId !== activeTenantId) return;
             setServices(prev => {
               if (prev.some(s => s.id === newService.id)) return prev;
               return [newService, ...prev];
             });
           } else if (payload.eventType === 'UPDATE') {
             const updated = mapServiceFromDb(payload.new);
+            if (updated.tenantId && updated.tenantId !== activeTenantId) return;
             setServices(prev => prev.map(s => s.id === updated.id ? updated : s));
           } else if (payload.eventType === 'DELETE') {
             setServices(prev => prev.filter(s => s.id !== payload.old.id));
@@ -312,10 +371,11 @@ export const BookingProvider = ({ children }) => {
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'salon_stylists', filter: `tenant_id=eq.${activeTenantId}` },
+        { event: '*', schema: 'public', table: 'salon_stylists' },
         (payload) => {
           if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
             const updated = mapStylistFromDb(payload.new);
+            if (updated.tenantId && updated.tenantId !== activeTenantId) return;
             setStylists(prev => {
               const exists = prev.some(s => s.id === updated.id);
               if (exists) {
@@ -330,16 +390,18 @@ export const BookingProvider = ({ children }) => {
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'salon_bookings', filter: `tenant_id=eq.${activeTenantId}` },
+        { event: '*', schema: 'public', table: 'salon_bookings' },
         (payload) => {
           if (payload.eventType === 'INSERT') {
             const newBk = mapBookingFromDb(payload.new);
+            if (newBk.tenantId && newBk.tenantId !== activeTenantId) return;
             setBookings(prev => {
               if (prev.some(b => b.id === newBk.id)) return prev;
               return [newBk, ...prev];
             });
           } else if (payload.eventType === 'UPDATE') {
             const updated = mapBookingFromDb(payload.new);
+            if (updated.tenantId && updated.tenantId !== activeTenantId) return;
             setBookings(prev => prev.map(b => b.id === updated.id ? updated : b));
           } else if (payload.eventType === 'DELETE') {
             setBookings(prev => prev.filter(b => b.id !== payload.old.id));
@@ -348,10 +410,11 @@ export const BookingProvider = ({ children }) => {
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'salon_custom_slots', filter: `tenant_id=eq.${activeTenantId}` },
+        { event: '*', schema: 'public', table: 'salon_custom_slots' },
         (payload) => {
           if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
             const updated = mapCustomSlotFromDb(payload.new);
+            if (updated.tenantId && updated.tenantId !== activeTenantId) return;
             setCustomSlots(prev => {
               const filtered = prev.filter(s => s.id !== updated.id);
               return [...filtered, updated];
@@ -363,26 +426,33 @@ export const BookingProvider = ({ children }) => {
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'salon_reviews', filter: `tenant_id=eq.${activeTenantId}` },
+        { event: '*', schema: 'public', table: 'salon_reviews' },
         (payload) => {
           if (payload.eventType === 'INSERT') {
             const newRev = mapReviewFromDb(payload.new);
+            if (newRev.tenantId && newRev.tenantId !== activeTenantId) return;
             setReviews(prev => {
               if (prev.some(r => r.id === newRev.id)) return prev;
               return [newRev, ...prev];
             });
           } else if (payload.eventType === 'UPDATE') {
             const updated = mapReviewFromDb(payload.new);
+            if (updated.tenantId && updated.tenantId !== activeTenantId) return;
             setReviews(prev => prev.map(r => r.id === updated.id ? updated : r));
           } else if (payload.eventType === 'DELETE') {
             setReviews(prev => prev.filter(r => r.id !== payload.old.id));
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          realtimeChannelRef.current = channel;
+        }
+      });
 
     return () => {
       isMounted = false;
+      realtimeChannelRef.current = null;
       supabase.removeChannel(channel);
     };
   }, [activeTenantId]);
@@ -1038,43 +1108,91 @@ export const BookingProvider = ({ children }) => {
     }
   };
 
-  const addService = (newSrv) => {
+  const addService = async (newSrv) => {
     const srvObj = {
       id: `srv-${Date.now()}`,
       name: newSrv.name,
       category: newSrv.category || 'haircut',
       price: Number(newSrv.price) || 3500,
       duration: Number(newSrv.duration) || 45,
-      description: newSrv.description,
+      description: newSrv.description || '',
       popular: false,
       badge: newSrv.badge || 'New Service',
       image: newSrv.image || 'https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=800&q=80',
       addOns: []
     };
-    setServices(prev => [srvObj, ...prev]);
+    
+    // 1. Local state & storage
+    setServices(prev => {
+      const updated = [srvObj, ...prev];
+      try {
+        localStorage.setItem(`tenant_srv_${activeTenantId}`, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     showToast('Service Added', `New service "${srvObj.name}" added to catalog.`, 'success');
 
+    // 2. Realtime WebSocket Broadcast to all other open tabs/devices
+    if (realtimeChannelRef.current) {
+      try {
+        realtimeChannelRef.current.send({
+          type: 'broadcast',
+          event: 'service_change',
+          payload: { type: 'add', service: srvObj }
+        });
+      } catch (err) {
+        console.warn('Realtime broadcast error:', err);
+      }
+    }
+
+    // 3. Persist to Supabase Database
     if (isSupabaseConfigured && supabase) {
-      supabase
-        .from('salon_services')
-        .upsert(mapServiceToDb(srvObj, activeTenantId))
-        .catch(console.warn);
+      try {
+        const { error } = await supabase
+          .from('salon_services')
+          .upsert(mapServiceToDb(srvObj, activeTenantId));
+        if (error) {
+          console.error('Supabase addService error:', error.message);
+        }
+      } catch (err) {
+        console.error('Supabase addService exception:', err);
+      }
     }
   };
 
-  const deleteService = (serviceId) => {
-    setServices(prev => prev.filter(s => s.id !== serviceId));
+  const deleteService = async (serviceId) => {
+    setServices(prev => {
+      const updated = prev.filter(s => s.id !== serviceId);
+      try {
+        localStorage.setItem(`tenant_srv_${activeTenantId}`, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     showToast('Service Deleted', 'Service removed from catalog.', 'info');
 
+    if (realtimeChannelRef.current) {
+      try {
+        realtimeChannelRef.current.send({
+          type: 'broadcast',
+          event: 'service_change',
+          payload: { type: 'delete', id: serviceId }
+        });
+      } catch {}
+    }
+
     if (isSupabaseConfigured && supabase) {
-      supabase.from('salon_services').delete().eq('id', serviceId).catch(console.warn);
+      try {
+        await supabase.from('salon_services').delete().eq('id', serviceId);
+      } catch (e) {
+        console.error('Supabase deleteService error:', e);
+      }
     }
   };
 
-  const updateService = (id, updatedData) => {
+  const updateService = async (id, updatedData) => {
     let finalService = null;
-    setServices(prev =>
-      prev.map(s => {
+    setServices(prev => {
+      const updated = prev.map(s => {
         if (s.id === id) {
           finalService = {
             ...s,
@@ -1085,15 +1203,32 @@ export const BookingProvider = ({ children }) => {
           return finalService;
         }
         return s;
-      })
-    );
+      });
+      try {
+        localStorage.setItem(`tenant_srv_${activeTenantId}`, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     showToast('Service Updated', 'Service details and photo updated.', 'success');
 
+    if (realtimeChannelRef.current && finalService) {
+      try {
+        realtimeChannelRef.current.send({
+          type: 'broadcast',
+          event: 'service_change',
+          payload: { type: 'update', service: finalService }
+        });
+      } catch {}
+    }
+
     if (isSupabaseConfigured && supabase && finalService) {
-      supabase
-        .from('salon_services')
-        .upsert(mapServiceToDb(finalService, activeTenantId))
-        .catch(console.warn);
+      try {
+        await supabase
+          .from('salon_services')
+          .upsert(mapServiceToDb(finalService, activeTenantId));
+      } catch (e) {
+        console.error('Supabase updateService error:', e);
+      }
     }
   };
 
